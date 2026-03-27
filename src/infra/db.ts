@@ -12,6 +12,7 @@ export function initDb(path: string): Database.Database {
       prompt TEXT NOT NULL,
       filters_json TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
+      message_template TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -56,6 +57,13 @@ export function initDb(path: string): Database.Database {
       updated_at TEXT NOT NULL
     );
   `);
+
+  // migration: add message_template column if it doesn't exist yet
+  try {
+    db.exec(`ALTER TABLE watchlists ADD COLUMN message_template TEXT;`);
+  } catch {
+    // column already exists
+  }
 
   return db;
 }

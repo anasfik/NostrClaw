@@ -7,31 +7,71 @@ if (typeof globalThis.WebSocket === "undefined") {
   (globalThis as any).WebSocket = WebSocket as any;
 }
 
-function formatNotificationMessage(
+function buildTemplateVars(
   input: Parameters<NotificationSender["sendMatchNotification"]>[0],
-): string {
+): Record<string, string> {
   const nevent = nip19.neventEncode({ id: input.event.id });
-  const eventLink = `https://njump.me/${nevent}`;
   const contentPreview = input.event.content
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 220);
-
-  const nextSteps = input.aiDecision.recommended_actions?.length
+  const actions = input.aiDecision.recommended_actions?.length
     ? input.aiDecision.recommended_actions
-        .map((action, index) => `${index + 1}. ${action}`)
+        .map((action, i) => `${i + 1}. ${action}`)
         .join("\n")
     : "-";
 
+  return {
+    "watchlist.id": input.watchlist.id,
+    "watchlist.name": input.watchlist.name,
+    "event.id": input.event.id,
+    "event.nevent": nevent,
+    "event.link": `https://njump.me/${nevent}`,
+    "event.pubkey": input.event.pubkey,
+    "event.author_link": `https://njump.me/${input.event.pubkey}`,
+    "event.kind": String(input.event.kind),
+    "event.created_at": String(input.event.created_at),
+    "event.content": input.event.content,
+    "event.content_preview": contentPreview,
+    "ai.message": input.aiDecision.message ?? "Relevant event found.",
+    "ai.score":
+      input.aiDecision.match_score != null
+        ? String(input.aiDecision.match_score)
+        : "n/a",
+    "ai.link": input.aiDecision.actionable_link ?? "",
+    "ai.actions": actions,
+  };
+}
+
+function interpolateTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(/\{\{([^}]+)\}\}/g, (_match, key: string) => {
+    const k = key.trim();
+    return Object.prototype.hasOwnProperty.call(vars, k) ? vars[k] : `{{${k}}}`;
+  });
+}
+
+function formatNotificationMessage(
+  input: Parameters<NotificationSender["sendMatchNotification"]>[0],
+): string {
+  const vars = buildTemplateVars(input);
+
+  if (input.watchlist.messageTemplate) {
+    return interpolateTemplate(input.watchlist.messageTemplate, vars);
+  }
+
+  // Default built-in template
   const sections = [
-    `Nostr-Claw Match\nWatchlist: ${input.watchlist.name}`,
-    `Summary\n${input.aiDecision.message ?? "Relevant event found."}`,
-    `Details\nScore: ${input.aiDecision.match_score ?? "n/a"}\nEvent: ${eventLink}\nAuthor: https://njump.me/${input.event.pubkey}`,
-    input.aiDecision.actionable_link
-      ? `Action\n${input.aiDecision.actionable_link}`
+    `Nostr-Claw Match\nWatchlist: ${vars["watchlist.name"]}`,
+    `Summary\n${vars["ai.message"]}`,
+    `Details\nScore: ${vars["ai.score"]}\nEvent: ${vars["event.link"]}\nAuthor: ${vars["event.author_link"]}`,
+    vars["ai.link"] ? `Action\n${vars["ai.link"]}` : undefined,
+    `Next Steps\n${vars["ai.actions"]}`,
+    vars["event.content_preview"]
+      ? `Preview\n${vars["event.content_preview"]}`
       : undefined,
-    `Next Steps\n${nextSteps}`,
-    contentPreview ? `Preview\n${contentPreview}` : undefined,
   ];
 
   return sections.filter(Boolean).join("\n\n");

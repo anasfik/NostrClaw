@@ -22,6 +22,7 @@ const watchlistSchema = z.object({
   prompt: z.string().min(3),
   active: z.boolean().default(true),
   filters: watchlistFilterSchema,
+  messageTemplate: z.string().min(1).optional(),
 });
 
 const configSchema = z.object({
@@ -147,6 +148,7 @@ export function getConfig(
       prompt: watchlist.prompt,
       active: watchlist.active,
       filters: normalizeFilters(watchlist.filters),
+      messageTemplate: watchlist.messageTemplate,
     })),
   };
 }

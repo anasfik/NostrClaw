@@ -19,6 +19,8 @@ export class PipelineService {
   private watchlists: Watchlist[] = [];
   private unbindRelay?: () => void;
   private refreshTimer?: NodeJS.Timeout;
+  /** Guards against duplicate concurrent processing of the same (event, watchlist) pair. */
+  private readonly inFlight = new Set<string>();
 
   constructor(
     private readonly deps: {
@@ -182,30 +184,39 @@ export class PipelineService {
     );
 
     for (const watchlist of this.watchlists) {
-      try {
-        const isProcessed = this.deps.processingRepo.hasProcessed(
-          event.id,
-          watchlist.id,
+      const isProcessed = this.deps.processingRepo.hasProcessed(
+        event.id,
+        watchlist.id,
+      );
+
+      const quickMatch = matchesQuickFilter(event, watchlist.filters, {
+        isProcessed,
+      });
+
+      if (!quickMatch) {
+        this.deps.logger.debug(
+          {
+            eventId: event.id,
+            watchlistId: watchlist.id,
+            reason: isProcessed ? "already_processed" : "quick_filter_no_match",
+          },
+          "pipeline:event:skipped",
         );
+        continue;
+      }
 
-        const quickMatch = matchesQuickFilter(event, watchlist.filters, {
-          isProcessed,
-        });
+      // Prevent concurrent duplicate processing for the same (event, watchlist)
+      const flightKey = `${event.id}:${watchlist.id}`;
+      if (this.inFlight.has(flightKey)) {
+        this.deps.logger.debug(
+          { eventId: event.id, watchlistId: watchlist.id },
+          "pipeline:event:skipped:in-flight",
+        );
+        continue;
+      }
+      this.inFlight.add(flightKey);
 
-        if (!quickMatch) {
-          this.deps.logger.debug(
-            {
-              eventId: event.id,
-              watchlistId: watchlist.id,
-              reason: isProcessed
-                ? "already_processed"
-                : "quick_filter_no_match",
-            },
-            "pipeline:event:skipped",
-          );
-          continue;
-        }
-
+      try {
         this.deps.logger.info(
           {
             eventId: event.id,
@@ -242,24 +253,14 @@ export class PipelineService {
         });
 
         this.deps.logger.debug(
-          {
-            eventId: event.id,
-            watchlistId: watchlist.id,
-          },
+          { eventId: event.id, watchlistId: watchlist.id },
           "pipeline:event:saved",
         );
 
-        await this.appendProcessingLog({
-          watchlist,
-          event,
-          aiDecision,
-        });
+        await this.appendProcessingLog({ watchlist, event, aiDecision });
 
         this.deps.logger.debug(
-          {
-            eventId: event.id,
-            watchlistId: watchlist.id,
-          },
+          { eventId: event.id, watchlistId: watchlist.id },
           "pipeline:event:log-written",
         );
 
@@ -284,10 +285,7 @@ export class PipelineService {
           });
 
           this.deps.logger.debug(
-            {
-              eventId: event.id,
-              watchlistId: watchlist.id,
-            },
+            { eventId: event.id, watchlistId: watchlist.id },
             "pipeline:match:insight-saved",
           );
 
@@ -307,10 +305,7 @@ export class PipelineService {
           );
         } else {
           this.deps.logger.debug(
-            {
-              eventId: event.id,
-              watchlistId: watchlist.id,
-            },
+            { eventId: event.id, watchlistId: watchlist.id },
             "pipeline:event:no-match",
           );
         }
@@ -319,6 +314,8 @@ export class PipelineService {
           { error, eventId: event.id, watchlistId: watchlist.id },
           "pipeline:event:failed",
         );
+      } finally {
+        this.inFlight.delete(flightKey);
       }
     }
   }

@@ -26,6 +26,7 @@ function parseWatchlistRow(row: any): Watchlist {
     prompt: row.prompt,
     filters: JSON.parse(row.filters_json),
     active: Boolean(row.active),
+    messageTemplate: row.message_template ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -40,19 +41,21 @@ export class WatchlistRepository {
     prompt: string;
     filters: WatchlistFilter;
     active: boolean;
+    messageTemplate?: string;
   }): void {
     const existing = this.getById(input.id);
     const now = nowIso();
 
     this.db
       .prepare(
-        `INSERT INTO watchlists (id, name, prompt, filters_json, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO watchlists (id, name, prompt, filters_json, active, message_template, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            prompt = excluded.prompt,
            filters_json = excluded.filters_json,
            active = excluded.active,
+           message_template = excluded.message_template,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -61,6 +64,7 @@ export class WatchlistRepository {
         input.prompt,
         JSON.stringify(input.filters),
         input.active ? 1 : 0,
+        input.messageTemplate ?? null,
         existing?.createdAt ?? now,
         now,
       );

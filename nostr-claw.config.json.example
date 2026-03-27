@@ -25,6 +25,7 @@
       "name": "Bitcoin L2 Discussions",
       "prompt": "Alert me about significant discussions around Bitcoin L2s and tell me why they matter.",
       "active": true,
+      "messageTemplate": "🔔 {{watchlist.name}}\n\n{{ai.message}}\n\nScore: {{ai.score}}\nEvent: {{event.link}}\nAuthor: {{event.author_link}}\n\nPreview:\n{{event.content_preview}}",
       "filters": {
         "keywords": ["bitcoin", "btc", "l2", "lightning", "ark"],
         "kinds": [1],

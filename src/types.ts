@@ -25,6 +25,7 @@ export interface Watchlist {
   prompt: string;
   filters: WatchlistFilter;
   active: boolean;
+  messageTemplate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +36,7 @@ export interface ConfigWatchlist {
   prompt: string;
   filters: WatchlistFilter;
   active: boolean;
+  messageTemplate?: string;
 }
 
 export interface AiDecision {
