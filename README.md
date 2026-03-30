@@ -16,7 +16,7 @@ Built for builders, founders, researchers, and teams that need signal fast.
 ## Why NostrMind gets attention
 
 - **Practical ROI**: catches opportunities and trend shifts while you sleep.
-- **Low-friction ops**: one JSON config, one process, one Docker compose.
+- **Low-friction ops**: one simple config, one process, one Docker compose.
 - **Local-first economics**: run Ollama locally, fail over to cloud AI only when needed.
 - **Agent-ready API**: query previously validated insights via a bridge endpoint.
 - **Production-minded core**: deduplication, throttled AI queue, persistent history, live dashboard.
@@ -28,20 +28,48 @@ Built for builders, founders, researchers, and teams that need signal fast.
 - **Founders / GTM teams**: watch for lead intent, product mentions, competitor chatter.
 - **Crypto / market analysts**: monitor specific narratives (e.g. Bitcoin L2s) with strict filtering.
 - **Open-source teams**: track project mentions and community feedback in real time.
-- **AI agent builders**: consume curated signals via `/bridge/query` instead of raw relay firehose.
+- **AI agent builders**: consume curated signals instead of raw relay firehose.
 - **Nostr power users**: tame the noise and surface only what matters to you.
 
 ---
 
-## Core capabilities
+## Usage by example
 
-- JSON-configured watchlists with keyword, kind, author, tag, since, and limit filters.
-- Multi-provider AI scoring: `ollama`, `openai`, `openrouter`, `gemini`.
-- AI failover chain using `ai.fallbackProviders`.
-- SQLite-backed processed events + insights (fast local retrieval).
-- Live dashboard + server-sent events stream.
-- Optional NIP-17 DM notifications with customizable message templates.
-- Legacy config compatibility (`nostr-claw.config.json`) for smooth migration.
+### 1) Lead generation while you sleep
+
+You run a dev agency and want inbound opportunities.
+NostrMind tracks hiring intent, urgent build requests, and collaboration posts, then surfaces only high-intent signals you can act on immediately.
+
+### 2) Narrative tracking for market conviction
+
+You are watching a theme like Bitcoin L2 momentum.
+NostrMind filters noise, validates discussion quality with AI, and highlights the conversations most likely to move sentiment.
+
+### 3) Brand + product mention radar
+
+You are launching a product and need fast feedback loops.
+NostrMind catches meaningful mentions, complaints, and praise so your team can respond early, improve messaging, and build stronger community trust.
+
+### 4) Founder command center
+
+You manage multiple goals at once (sales, reputation, trends).
+NostrMind lets you run multiple monitoring tracks in one place, so your attention goes to validated opportunities instead of endless scrolling.
+
+---
+
+## Config customization (no-code control)
+
+NostrMind is designed so non-developers can still shape outcomes precisely.
+
+You can customize:
+
+- **What matters**: define the exact topics and intent you care about.
+- **How strict matching should be**: broad discovery vs high-precision alerts.
+- **How often signals are evaluated**: balance speed and cost.
+- **How alerts are phrased**: tailor tone for yourself or your team.
+- **How private or cloud-based your setup is**: choose local-first, cloud-first, or hybrid.
+
+This gives teams strategic control without rebuilding infrastructure.
 
 ---
 
@@ -49,7 +77,7 @@ Built for builders, founders, researchers, and teams that need signal fast.
 
 1. **Relay ingestion**: subscribes to configured Nostr relays.
 2. **Quick filter sieve**: cheap local filtering + processed-event dedup.
-3. **AI intelligence gate**: strict JSON decision (`notify`, `message`, `match_score`, actions).
+3. **AI intelligence gate**: strict pass/fail decision with clear reasoning and action suggestions.
 
 Only meaningful events become insights. Everything else is dropped early for cost and speed.
 
@@ -73,12 +101,10 @@ cp nostr-mind.config.json.example nostr-mind.config.json
 
 Configure:
 
-- AI provider/model/API keys
-- relays
-- watchlists
-- optional DM recipient (`notifications.recipientNpub`)
-
-Reference: [nostr-mind.config.json.example](nostr-mind.config.json.example)
+- your monitoring goals
+- your preferred AI mode
+- your notification destination
+- your watch themes
 
 ### 4) Run
 
@@ -114,61 +140,41 @@ Port:
 
 ---
 
-## AI provider modes
+## Intelligence modes
 
-| Provider     | Mode  | Typical use                       |
-| ------------ | ----- | --------------------------------- |
-| `ollama`     | Local | Private + lowest recurring cost   |
-| `openai`     | Cloud | High-quality classification       |
-| `openrouter` | Cloud | Model routing + flexibility       |
-| `gemini`     | Cloud | Fast, cost-effective cloud option |
+- **Private-first**: run mostly local for maximum control.
+- **Cloud-accelerated**: prioritize speed and strongest model quality.
+- **Hybrid**: default local and fall back to cloud when needed.
 
-Example local-first with cloud fallback:
-
-```json
-"ai": {
-  "provider": "ollama",
-  "fallbackProviders": ["openai", "openrouter", "gemini"],
-  "rpm": 20,
-  "ollama": {
-    "baseUrl": "http://localhost:11434",
-    "model": "llama3.2"
-  }
-}
-```
+Choose the mode that fits your budget, privacy needs, and expected volume.
 
 ---
 
 ## API + dashboard
 
-When dashboard is enabled, API is served from the same process.
+When dashboard is enabled, you get a live operational view of:
 
-- `GET /health`
-- `GET /api/stats`
-- `GET /api/watchlists`
-- `POST /api/watchlists`
-- `PATCH /api/watchlists/:id`
-- `DELETE /api/watchlists/:id`
-- `GET /api/insights`
-- `POST /bridge/query` (agent bridge)
-- `GET /api/events/stream` (live SSE)
+- overall system health
+- signal volume and trend movement
+- watch performance across active monitoring tracks
+- real-time event activity
 
-Legacy compatibility endpoints remain available: `/watchlists`, `/insights`.
+This makes NostrMind easy to trust in production and easy to demo to clients or stakeholders.
 
 ---
 
 ## DM alerts that feel actionable
 
-When `notifications.recipientNpub` is set, NostrMind can send NIP-17 DMs for AI-approved matches.
+NostrMind can send instant, high-context alerts when a strong match is detected.
 
-You can customize `watchlist.messageTemplate` using placeholders like:
+Each alert can include:
 
-- `{{watchlist.name}}`
-- `{{ai.message}}`
-- `{{ai.score}}`
-- `{{event.link}}`
-- `{{event.author_link}}`
-- `{{event.content_preview}}`
+- what was found
+- why it matters
+- where to jump in
+- what to do next
+
+The result is notifications that drive action, not just awareness.
 
 ---
 
@@ -193,7 +199,7 @@ You can customize `watchlist.messageTemplate` using placeholders like:
 ## Security
 
 - Never commit API keys or private keys.
-- Treat `senderNsec` and provider credentials as secrets.
+- Treat notification keys and provider credentials as secrets.
 - Prefer environment-specific config handling in production.
 
 ---
