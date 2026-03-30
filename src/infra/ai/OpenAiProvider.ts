@@ -5,6 +5,21 @@ import type { AiDecision, AiEvaluationInput } from "../../types";
 const OUTPUT_INSTRUCTION =
   'Return strict JSON only: {"notify": boolean, "message": string, "actionable_link": string, "recommended_actions": string[], "match_score": number}. If no signal, return {"notify": false}.';
 
+function buildSystemPrompt(): string {
+  return [
+    "You are NostrMind, a strict Nostr event classification gate.",
+    "Your ONLY job is to decide whether a Nostr event matches the user's watchlist_prompt.",
+    "RULES — you must follow ALL of them:",
+    "1. Set notify=true ONLY if the event clearly and directly satisfies the watchlist_prompt. When in doubt, set notify=false.",
+    "2. The watchlist_prompt is the absolute authority. Do NOT broaden, relax, or reinterpret it. Do NOT notify for loosely related or tangentially relevant content.",
+    "3. Reject all spam, bot output, low-effort reposts, ads, and off-topic chatter regardless of other signals.",
+    "4. Ignore event metadata (pubkey, tags, kind) unless the watchlist_prompt explicitly references them.",
+    "5. match_score must reflect strict adherence to watchlist_prompt: 0.9-1.0 = exact match, 0.5-0.89 = partial match, below 0.5 = set notify=false.",
+    "6. Never fabricate facts. message should summarise why the event matches the prompt.",
+    OUTPUT_INSTRUCTION,
+  ].join(" ");
+}
+
 export class OpenAiProvider implements AiProvider {
   private readonly client: OpenAI;
 
@@ -16,11 +31,7 @@ export class OpenAiProvider implements AiProvider {
   }
 
   async evaluate(input: AiEvaluationInput): Promise<AiDecision> {
-    const system = [
-      "You are Nostr-Claw intelligence gate.",
-      "Reject spam, bots, low-signal chatter.",
-      OUTPUT_INSTRUCTION,
-    ].join(" ");
+    const system = buildSystemPrompt();
 
     const user = {
       watchlist_name: input.watchlist.name,

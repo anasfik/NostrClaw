@@ -1,45 +1,49 @@
-# Nostr-Claw
+# NostrMind
 
-Nostr-Claw is a config-driven Nostr monitoring worker powered by AI. It connects to relays, watches for events matching your watchlist filters, evaluates them with AI, and sends DM notifications for matches. All behavior is controlled by a single JSON config file.
+NostrMind is a config-driven Nostr monitoring worker with AI classification and optional DM alerts.
 
-You:
+It connects to relays, filters events with your watchlists, runs AI evaluation, stores results in SQLite, and exposes a live dashboard.
 
-1. Edit one JSON file.
-2. Start (or restart) the worker.
-3. Receive AI-filtered Nostr matches as NIP-17 DMs.
+## Highlights
 
----
-
-## What it does
-
-- Connects to Nostr relays
-- Watches events using your watchlist filters
-- Runs AI evaluation on matching events
-- Stores processed state and insights in SQLite
-- Sends organized DM notifications to your recipient npub
+- JSON-configured runtime (`nostr-mind.config.json`)
+- AI providers: `ollama`, `openai`, `openrouter`, `gemini`
+- Provider failover with `ai.fallbackProviders`
+- Live dashboard with SSE stream on port `3000` by default
+- SQLite-backed processing history and insights
+- NIP-17 DM notifications (when notifier identity + recipient are configured)
 
 ---
 
 ## Quick start
 
-1. Copy the example config:
+1. Install dependencies:
 
 ```bash
-cp nostr-claw.config.json.example nostr-claw.config.json
+npm install
 ```
 
-2. Edit [nostr-claw.config.json](nostr-claw.config.json):
-   - AI provider and API key
-   - notification recipient npub
-   - watchlists and filters
+2. Create config:
 
-3. Run:
+```bash
+cp nostr-mind.config.json.example nostr-mind.config.json
+```
+
+3. Edit [nostr-mind.config.json](nostr-mind.config.json):
+
+- pick AI provider + credentials/model
+- set `notifications.recipientNpub` (optional, for DM alerts)
+- define `watchlists`
+
+4. Run in dev mode:
 
 ```bash
 npm run dev
 ```
 
-Production:
+Dashboard: http://localhost:3000
+
+Build + run production:
 
 ```bash
 npm run build
@@ -48,81 +52,98 @@ npm start
 
 ---
 
-## Config file (important fields)
+## AI providers
 
-Default config path: [nostr-claw.config.json](nostr-claw.config.json), example:
+| Provider     | Type  | Notes                                           |
+| ------------ | ----- | ----------------------------------------------- |
+| `ollama`     | Local | No cloud API cost; requires local Ollama server |
+| `openai`     | Cloud | Uses OpenAI chat completions                    |
+| `openrouter` | Cloud | OpenRouter OpenAI-compatible endpoint           |
+| `gemini`     | Cloud | Gemini OpenAI-compatible endpoint               |
+
+Example (local-first with cloud fallback):
+
+```json
+"ai": {
+  "provider": "ollama",
+  "fallbackProviders": ["openai", "openrouter", "gemini"],
+  "rpm": 20,
+  "ollama": {
+    "baseUrl": "http://localhost:11434",
+    "model": "llama3.2"
+  }
+}
+```
+
+---
+
+## Config shape (minimal example)
 
 ```json
 {
   "nodeEnv": "development",
   "logLevel": "info",
-  "logFilePath": "./log.txt",
-  "dbPath": "./data/nostr-claw.sqlite",
+  "logFilePath": "./data/log.txt",
+  "dbPath": "./data/nostr-mind.sqlite",
   "nostrRelays": [
     "wss://relay.damus.io",
     "wss://relay.primal.net",
     "wss://nos.lol"
   ],
   "ai": {
-    "provider": "openrouter",
-    "rpm": 40,
-    "openrouter": {
-      "apiKey": "YOUR_OPENROUTER_API_KEY",
-      "model": "stepfun/step-3.5-flash:free"
-    }
+    "provider": "ollama",
+    "fallbackProviders": ["openai", "openrouter", "gemini"],
+    "rpm": 20,
+    "ollama": { "baseUrl": "http://localhost:11434", "model": "llama3.2" }
   },
   "notifications": {
-    "recipientNpub": "YOUR_RECIPIENT_NPUB"
+    "recipientNpub": "npub1..."
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 3000,
+    "host": "127.0.0.1"
   },
   "watchlists": [
     {
       "id": "crypto",
-      "name": "crypto",
-      "prompt": "Alert me about any news related to cryptocurrencies",
+      "name": "Crypto",
+      "prompt": "Alert me about significant cryptocurrency market events",
       "active": true,
-      "filters": {
-        "kinds": [1],
-        "limit": 1
-      }
-    },
-    {
-      "id": "web3",
-      "name": "web3",
-      "prompt": "Alert me about any news related to web3 and blockchain technology",
-      "active": true,
-      "filters": {
-        "kinds": [1],
-        "since": 1735689600,
-        "limit": 1
-      }
-    },
-    {
-      "id": "fiatjaf",
-      "name": "specific account, fiatjaf",
-      "prompt": "Alert me about any posts from the account @fiatjaf, his npub: npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
-      "active": true,
-      "filters": {
-        "kinds": [1],
-        "limit": 1
-      }
-    },
-    {
-      "id": "listings",
-      "name": "listings",
-      "prompt": "all listingns where people offer to sell something, I want to see what people try to give, sell, or trade on nostr",
-      "active": true,
-      "filters": {
-        "kinds": [30402],
-        "limit": 1
-      }
+      "filters": { "kinds": [1], "limit": 50 }
     }
   ]
 }
 ```
 
-## Docker
+Full reference: [nostr-mind.config.json.example](nostr-mind.config.json.example)
 
-After creating your config:
+---
+
+## Dashboard
+
+When enabled, dashboard is served from the same process:
+
+> Dashboard is vibe-coded — please drop any issues/nugs (bugs, UX nits, or feature ideas).
+
+### Dashboard screenshot
+
+![NostrMind dashboard preview](docs/screenshots/nostrmind-dashboard.png)
+
+Save the provided dashboard screenshot to `docs/screenshots/nostrmind-dashboard.png` to render this preview in GitHub.
+
+- URL: `http://<dashboard.host>:<dashboard.port>`
+- Live event stream: `/api/events/stream`
+- API endpoints include:
+  - `/api/stats`
+  - `/api/watchlists`
+  - `/api/insights`
+
+Legacy endpoints are still available for compatibility (`/watchlists`, `/insights`).
+
+---
+
+## Docker
 
 ```bash
 docker compose up -d --build
@@ -130,12 +151,20 @@ docker compose up -d --build
 
 Compose mounts:
 
-- [nostr-claw.config.json](nostr-claw.config.json) → `/app/nostr-claw.config.json`
-- `./data` → persistent SQLite data
+- `./nostr-mind.config.json` -> `/app/nostr-mind.config.json` (read-only)
+- `./data` -> `/app/data`
+
+Port mapping:
+
+- `3000:3000` (dashboard/API)
+
+---
 
 ## Notes
 
-- After changing config, restart the worker.
-- Watchlists removed from config are disabled in DB on next startup.
-- DM visibility depends on relay overlap and client inbox behavior.
-- Keep your API keys and private keys secret.
+- Restart after config changes.
+- Config loading prefers `nostr-mind.config.json` and also supports legacy `nostr-claw.config.json`.
+- On startup, watchlists from config are seeded with `INSERT OR IGNORE`:
+  - existing DB watchlists are preserved
+  - dashboard edits are not overwritten by config sync
+- Keep API keys and private keys secret.

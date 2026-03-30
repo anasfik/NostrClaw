@@ -12,8 +12,9 @@ import {
   WatchlistRepository,
 } from "../infra/repositories";
 import type { AppLogger } from "../logger";
-import type { Watchlist } from "../types";
-import { AiQueue } from "./AiQueue";
+import type { NostrEvent, Watchlist } from "../types";
+import { AiQueue, QueueFullError } from "./AiQueue";
+import type { EventBus } from "./EventBus";
 
 export class PipelineService {
   private watchlists: Watchlist[] = [];
@@ -33,6 +34,7 @@ export class PipelineService {
       logger: AppLogger;
       logFilePath: string;
       watchlistRefreshMs: number;
+      eventBus?: EventBus;
     },
   ) {}
 
@@ -166,14 +168,7 @@ export class PipelineService {
     });
   }
 
-  private async handleEvent(event: {
-    id: string;
-    created_at: number;
-    content: string;
-    pubkey: string;
-    kind: number;
-    tags: string[][];
-  }): Promise<void> {
+  private async handleEvent(event: NostrEvent): Promise<void> {
     this.deps.logger.debug(
       {
         eventId: event.id,
@@ -259,6 +254,24 @@ export class PipelineService {
 
         await this.appendProcessingLog({ watchlist, event, aiDecision });
 
+        this.deps.eventBus?.publish({
+          type: aiDecision.notify ? "match" : "skip",
+          watchlistId: watchlist.id,
+          watchlistName: watchlist.name,
+          eventId: event.id,
+          eventPubkey: event.pubkey,
+          eventKind: event.kind,
+          eventCreatedAt: event.created_at,
+          eventTags: event.tags,
+          eventSig: event.sig,
+          content: event.content,
+          matchScore: aiDecision.match_score,
+          message: aiDecision.message,
+          actionableLink: aiDecision.actionable_link,
+          recommendedActions: aiDecision.recommended_actions,
+          timestamp: new Date().toISOString(),
+        });
+
         this.deps.logger.debug(
           { eventId: event.id, watchlistId: watchlist.id },
           "pipeline:event:log-written",
@@ -310,10 +323,17 @@ export class PipelineService {
           );
         }
       } catch (error) {
-        this.deps.logger.error(
-          { error, eventId: event.id, watchlistId: watchlist.id },
-          "pipeline:event:failed",
-        );
+        if (error instanceof QueueFullError) {
+          this.deps.logger.debug(
+            { eventId: event.id, watchlistId: watchlist.id },
+            "pipeline:event:dropped:queue-full",
+          );
+        } else {
+          this.deps.logger.error(
+            { error, eventId: event.id, watchlistId: watchlist.id },
+            "pipeline:event:failed",
+          );
+        }
       } finally {
         this.inFlight.delete(flightKey);
       }

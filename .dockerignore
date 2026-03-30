@@ -15,4 +15,5 @@ verify-dm.js
 scripts/
 guide.md
 CLI_GUIDE.md
+nostr-mind.config.json
 nostr-claw.config.json

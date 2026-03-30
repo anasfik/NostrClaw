@@ -10,6 +10,7 @@ log.txt
 guide.md
 CLI*.md
 *.sh
+nostr-mind.config.json
 nostr-claw.config.json
 verify-dm.js
 scripts/

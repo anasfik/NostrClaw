@@ -1,5 +1,5 @@
 {
-  "name": "nostr-claw",
+  "name": "nostrmind",
   "version": "0.1.0",
   "description": "Config-driven Nostr intelligence sieve with relay monitoring and DM alerts",
   "main": "dist/index.js",
@@ -20,11 +20,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^9.0.0",
     "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "nostr-tools": "^2.23.3",
     "openai": "^4.91.1",
+    "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "ws": "^8.18.1",
     "yargs": "^17.7.2",
@@ -32,12 +35,13 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.13.10",
+    "@types/node": "^22.19.15",
     "@types/ws": "^8.5.14",
     "@types/yargs": "^17.0.32",
     "supertest": "^7.1.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
+    "vite": "^7.3.1",
     "vitest": "^3.0.9"
   }
 }

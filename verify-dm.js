@@ -3,7 +3,7 @@
  * End-to-end test for Nostr DM functionality
  *
  * Steps:
- * 1. Verify NostrClaw identity exists and is valid
+ * 1. Verify NostrMind identity exists and is valid
  * 2. Check recipient npub is valid
  * 3. Simulate an event match and DM sending
  * 4. Verify logs contain DM send record
@@ -14,12 +14,12 @@ require("dotenv").config();
 const Database = require("better-sqlite3");
 const { nip19 } = require("nostr-tools");
 
-const db = new Database("./nostr-claw.sqlite");
+const db = new Database("./nostr-mind.sqlite");
 
 console.log("🔍 Verifying Nostr DM Functionality\n");
 
-// 1. Check NostrClaw identity
-console.log("1️⃣  NostrClaw Identity:");
+// 1. Check NostrMind identity
+console.log("1️⃣  NostrMind Identity:");
 const notifierNsec = db
   .prepare("SELECT value FROM app_settings WHERE key = 'notifier_nsec'")
   .get();
@@ -31,7 +31,7 @@ const notifierPubkey = db
   .get();
 
 if (!notifierNsec || !notifierNpub || !notifierPubkey) {
-  console.log("   ✗ NostrClaw identity not initialized");
+  console.log("   ✗ NostrMind identity not initialized");
   process.exit(1);
 }
 

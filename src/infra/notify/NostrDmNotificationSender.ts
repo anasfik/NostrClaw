@@ -64,7 +64,7 @@ function formatNotificationMessage(
 
   // Default built-in template
   const sections = [
-    `Nostr-Claw Match\nWatchlist: ${vars["watchlist.name"]}`,
+    `NostrMind Match\nWatchlist: ${vars["watchlist.name"]}`,
     `Summary\n${vars["ai.message"]}`,
     `Details\nScore: ${vars["ai.score"]}\nEvent: ${vars["event.link"]}\nAuthor: ${vars["event.author_link"]}`,
     vars["ai.link"] ? `Action\n${vars["ai.link"]}` : undefined,
@@ -307,8 +307,8 @@ export class NostrDmNotificationSender implements NotificationSender {
           created_at: Math.floor(Date.now() / 1000),
           tags: [],
           content: JSON.stringify({
-            name: "NostrClaw",
-            display_name: "NostrClaw",
+            name: "NostrMind",
+            display_name: "NostrMind",
             about: "Autonomous Nostr intelligence watchdog",
           }),
         },
@@ -335,7 +335,7 @@ export class NostrDmNotificationSender implements NotificationSender {
           failedRelayCount: metadataPublish.failedRelayCount,
           failedRelays: metadataPublish.failedRelays,
         },
-        "published NostrClaw metadata profile",
+        "published NostrMind metadata profile",
       );
     }
   }

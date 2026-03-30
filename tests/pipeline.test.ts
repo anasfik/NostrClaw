@@ -66,7 +66,7 @@ describe("PipelineService notifications", () => {
       aiProvider,
       aiQueue: new AiQueue(0),
       notificationSender,
-      logFilePath: "/tmp/nostr-claw-pipeline.test.log",
+      logFilePath: "/tmp/nostr-mind-pipeline.test.log",
       watchlistRefreshMs: 1000,
       logger: {
         debug: vi.fn(),

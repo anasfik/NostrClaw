@@ -1,8 +1,28 @@
 services:
-  nostr-claw:
+  nostrmind:
     build: .
-    container_name: nostr-claw
+    container_name: nostrmind
+    ports:
+      - "3000:3000"
     volumes:
       - ./data:/app/data
-      - ./nostr-claw.config.json:/app/nostr-claw.config.json:ro
+      - ./nostr-mind.config.json:/app/nostr-mind.config.json:ro
     restart: unless-stopped
+    # If using Ollama, point ai.ollama.baseUrl to http://ollama:11434 in your config
+    # and uncomment the depends_on + ollama service below.
+    #
+    # depends_on:
+    #   - ollama
+
+  # Uncomment to run Ollama locally in Docker (GPU support requires the nvidia toolkit)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   restart: unless-stopped
+
+# volumes:
+#   ollama_data:

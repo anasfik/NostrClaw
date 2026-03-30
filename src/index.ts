@@ -1,5 +1,9 @@
-import { getConfig } from "./config";
+import { getConfig, type AppConfig } from "./config";
 import type { AiProvider } from "./contracts";
+import { createApp } from "./app";
+import { FallbackAiProvider } from "./infra/ai/FallbackAiProvider";
+import { GeminiProvider } from "./infra/ai/GeminiProvider";
+import { OllamaProvider } from "./infra/ai/OllamaProvider";
 import { OpenAiProvider } from "./infra/ai/OpenAiProvider";
 import { OpenRouterProvider } from "./infra/ai/OpenRouterProvider";
 import { initDb } from "./infra/db";
@@ -12,6 +16,7 @@ import {
 import { NostrWsRelayConnector } from "./infra/relay/NostrWsRelayConnector";
 import { createLogger } from "./logger";
 import { AiQueue } from "./services/AiQueue";
+import { EventBus } from "./services/EventBus";
 import { PipelineService } from "./services/PipelineService";
 
 async function main(): Promise<void> {
@@ -28,25 +33,78 @@ async function main(): Promise<void> {
 
   const syncedWatchlists = watchlistRepo.syncFromConfig(config.watchlists);
 
-  let aiProvider: AiProvider;
-  if (config.aiProvider === "openai") {
-    if (!config.openAiApiKey) {
-      throw new Error("OPENAI_API_KEY is required when AI_PROVIDER=openai");
+  const createProvider = (
+    providerName: AppConfig["aiProvider"],
+    required = false,
+  ): AiProvider | undefined => {
+    if (providerName === "openai") {
+      if (!config.openAiApiKey) {
+        if (required) {
+          throw new Error("OPENAI_API_KEY is required when AI_PROVIDER=openai");
+        }
+        return undefined;
+      }
+      return new OpenAiProvider(config.openAiApiKey, config.openAiModel);
     }
-    aiProvider = new OpenAiProvider(config.openAiApiKey, config.openAiModel);
-  } else if (config.aiProvider === "openrouter") {
-    if (!config.openRouterApiKey) {
-      throw new Error(
-        "OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter",
+
+    if (providerName === "openrouter") {
+      if (!config.openRouterApiKey) {
+        if (required) {
+          throw new Error(
+            "OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter",
+          );
+        }
+        return undefined;
+      }
+      return new OpenRouterProvider(
+        config.openRouterApiKey,
+        config.openRouterModel,
       );
     }
-    aiProvider = new OpenRouterProvider(
-      config.openRouterApiKey,
-      config.openRouterModel,
-    );
-  } else {
-    throw new Error(`Unsupported AI_PROVIDER: ${config.aiProvider}`);
+
+    if (providerName === "gemini") {
+      if (!config.geminiApiKey) {
+        if (required) {
+          throw new Error("GEMINI_API_KEY is required when AI_PROVIDER=gemini");
+        }
+        return undefined;
+      }
+      return new GeminiProvider(config.geminiApiKey, config.geminiModel);
+    }
+
+    // Ollama provider
+    return new OllamaProvider(config.ollamaBaseUrl, config.ollamaModel);
+  };
+
+  const providerOrder = [
+    config.aiProvider,
+    ...config.aiFallbackProviders,
+  ].filter((providerName, index, all) => all.indexOf(providerName) === index);
+
+  const providerChain: Array<{ name: string; provider: AiProvider }> = [];
+  for (let i = 0; i < providerOrder.length; i += 1) {
+    const providerName = providerOrder[i];
+    const provider = createProvider(providerName, i === 0);
+
+    if (!provider) {
+      logger.warn(
+        { provider: providerName },
+        "ai-provider:fallback:skipped-unconfigured",
+      );
+      continue;
+    }
+
+    providerChain.push({ name: providerName, provider });
   }
+
+  if (providerChain.length === 0) {
+    throw new Error("No configured AI providers are available");
+  }
+
+  const aiProvider: AiProvider =
+    providerChain.length === 1
+      ? providerChain[0].provider
+      : new FallbackAiProvider(providerChain, logger);
 
   const relayConnector = new NostrWsRelayConnector(
     config.nostrRelays,
@@ -65,12 +123,19 @@ async function main(): Promise<void> {
 
   await notificationSender?.initialize?.();
 
-  const aiQueue = new AiQueue(config.aiRpm, (waitMs) =>
-    logger.warn(
-      { waitMs, pending: aiQueue.pending },
-      "AI rate limit reached, throttling next request",
-    ),
+  const aiQueue = new AiQueue(
+    config.aiRpm,
+    (waitMs) =>
+      logger.warn({ waitMs, pending: aiQueue.pending }, "ai-queue:throttled"),
+    200,
+    (pending) =>
+      logger.warn(
+        { pending, shed: aiQueue.shed },
+        "ai-queue:full:event-dropped",
+      ),
   );
+
+  const eventBus = new EventBus();
 
   const pipeline = new PipelineService({
     relayConnector,
@@ -82,9 +147,49 @@ async function main(): Promise<void> {
     logFilePath: config.logFilePath,
     watchlistRefreshMs: config.watchlistRefreshMs,
     logger,
+    eventBus,
   });
 
   pipeline.start();
+
+  // ── Dashboard HTTP server ──────────────────────────────────────────────────
+
+  const activeModel = (() => {
+    if (config.aiProvider === "openrouter") return config.openRouterModel;
+    if (config.aiProvider === "gemini") return config.geminiModel;
+    if (config.aiProvider === "ollama") return config.ollamaModel;
+    return config.openAiModel;
+  })();
+
+  if (config.dashboardEnabled) {
+    const server = createApp(
+      {
+        watchlistRepo,
+        processingRepo,
+        eventBus,
+        runtimeMeta: {
+          startTime: new Date(),
+          aiProvider: config.aiProvider,
+          aiModel: activeModel,
+          relayCount: config.nostrRelays.length,
+          aiQueuePending: () => aiQueue.pending,
+          aiQueueShed: () => aiQueue.shed,
+        },
+        onWatchlistsChanged: () => pipeline.refreshWatchlistsAndSubscriptions(),
+      },
+      { logger: false },
+    );
+
+    await server.listen({
+      port: config.dashboardPort,
+      host: config.dashboardHost,
+    });
+
+    logger.info(
+      { url: `http://${config.dashboardHost}:${config.dashboardPort}` },
+      "dashboard:started",
+    );
+  }
 
   logger.info(
     {
@@ -95,16 +200,14 @@ async function main(): Promise<void> {
         .length,
       notifyRecipientNpub: config.notifyRecipientNpub ?? null,
     },
-    "nostr-claw started in config-file mode",
+    "NostrMind started in config-file mode",
   );
 
   logger.debug(
     {
       aiProvider: config.aiProvider,
-      aiModel:
-        config.aiProvider === "openrouter"
-          ? config.openRouterModel
-          : config.openAiModel,
+      aiFallbackProviders: config.aiFallbackProviders,
+      aiModel: activeModel,
       aiRpm: config.aiRpm,
       watchlists: syncedWatchlists.map((watchlist) => ({
         id: watchlist.id,
@@ -124,7 +227,7 @@ async function main(): Promise<void> {
     }
 
     shuttingDown = true;
-    logger.info("shutting down nostr-claw");
+    logger.info("shutting down NostrMind");
     pipeline.stop();
     db.close();
     process.exit(0);

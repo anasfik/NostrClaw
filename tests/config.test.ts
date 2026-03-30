@@ -8,8 +8,8 @@ import { WatchlistRepository } from "../src/infra/repositories";
 
 describe("config-file mode", () => {
   it("loads JSON config and resolves relative paths", () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "nostr-claw-config-"));
-    const configPath = path.join(tempDir, "nostr-claw.config.json");
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "nostr-mind-config-"));
+    const configPath = path.join(tempDir, "nostr-mind.config.json");
 
     writeFileSync(
       configPath,
@@ -20,6 +20,7 @@ describe("config-file mode", () => {
           nostrRelays: ["wss://relay.damus.io"],
           ai: {
             provider: "openai",
+            fallbackProviders: ["openrouter", "gemini"],
             rpm: 10,
             openai: {
               apiKey: "test-key",
@@ -54,14 +55,56 @@ describe("config-file mode", () => {
     expect(config.logFilePath).toBe(path.join(tempDir, "custom.log"));
     expect(config.dbPath).toBe(path.join(tempDir, "custom.sqlite"));
     expect(config.aiProvider).toBe("openai");
+    expect(config.aiFallbackProviders).toEqual(["openrouter", "gemini"]);
     expect(config.openAiApiKey).toBe("test-key");
     expect(config.watchlists[0].id).toBe("jobs");
   });
 
-  it("syncs config watchlists into SQLite and disables removed ones", () => {
+  it("loads Gemini provider settings", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "nostr-mind-config-"));
+    const configPath = path.join(tempDir, "nostr-mind.config.json");
+
+    writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ai: {
+            provider: "gemini",
+            rpm: 30,
+            gemini: {
+              apiKey: "gemini-test-key",
+              model: "gemini-2.5-flash",
+            },
+          },
+          watchlists: [
+            {
+              name: "Gemini test",
+              prompt: "Find high signal posts",
+              filters: {
+                kinds: [1],
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const config = getConfig(configPath);
+
+    expect(config.aiProvider).toBe("gemini");
+    expect(config.geminiApiKey).toBe("gemini-test-key");
+    expect(config.geminiModel).toBe("gemini-2.5-flash");
+    expect(config.aiRpm).toBe(30);
+  });
+
+  it("seeds config watchlists into SQLite on first run and preserves DB state on subsequent runs", () => {
     const db = initDb(":memory:");
     const repo = new WatchlistRepository(db);
 
+    // First sync: seeds both entries
     repo.syncFromConfig([
       {
         id: "alpha",
@@ -79,10 +122,15 @@ describe("config-file mode", () => {
       },
     ]);
 
+    // Simulate dashboard edit: user renamed alpha and toggled beta off
+    repo.update("alpha", { name: "Alpha (edited)" });
+    repo.setActive("beta", false);
+
+    // Second sync with changed config — DB edits must be preserved
     repo.syncFromConfig([
       {
         id: "alpha",
-        name: "Alpha updated",
+        name: "Alpha updated via config",
         prompt: "Track alpha updates",
         active: true,
         filters: {
@@ -94,13 +142,15 @@ describe("config-file mode", () => {
     ]);
 
     const all = repo.list();
-    const alpha = all.find((watchlist) => watchlist.id === "alpha");
-    const beta = all.find((watchlist) => watchlist.id === "beta");
+    const alpha = all.find((w) => w.id === "alpha");
+    const beta = all.find((w) => w.id === "beta");
 
-    expect(alpha?.name).toBe("Alpha updated");
+    // Dashboard edit wins — config must not overwrite existing rows
+    expect(alpha?.name).toBe("Alpha (edited)");
     expect(alpha?.active).toBe(true);
     expect(alpha?.filters.since).toBe(1735689600);
-    expect(alpha?.filters.limit).toBe(20);
+
+    // beta is still in DB (not deleted), still inactive as the user set it
     expect(beta?.active).toBe(false);
   });
 });

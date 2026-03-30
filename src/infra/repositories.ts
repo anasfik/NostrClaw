@@ -128,31 +128,73 @@ export class WatchlistRepository {
     return this.getById(id);
   }
 
+  update(
+    id: string,
+    input: {
+      name?: string;
+      prompt?: string;
+      filters?: WatchlistFilter;
+      active?: boolean;
+    },
+  ): Watchlist | null {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const now = nowIso();
+    this.db
+      .prepare(
+        `UPDATE watchlists
+         SET name = ?, prompt = ?, filters_json = ?, active = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        input.name ?? existing.name,
+        input.prompt ?? existing.prompt,
+        JSON.stringify(input.filters ?? existing.filters),
+        (input.active ?? existing.active) ? 1 : 0,
+        now,
+        id,
+      );
+    return this.getById(id);
+  }
+
+  remove(id: string): boolean {
+    const result = this.db
+      .prepare("DELETE FROM watchlists WHERE id = ?")
+      .run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Seeds watchlists from config on startup.
+   * Only inserts entries that don't already exist in the DB — never
+   * overwrites or deactivates existing records so that dashboard edits
+   * and dashboard-created watchlists are always preserved across restarts.
+   */
   syncFromConfig(watchlists: ConfigWatchlist[]): Watchlist[] {
     const now = nowIso();
 
-    const sync = this.db.transaction((items: ConfigWatchlist[]) => {
-      for (const watchlist of items) {
-        this.upsert(watchlist);
-      }
-
-      if (items.length === 0) {
+    const seed = this.db.transaction((items: ConfigWatchlist[]) => {
+      for (const item of items) {
         this.db
-          .prepare("UPDATE watchlists SET active = 0, updated_at = ?")
-          .run(now);
-        return;
+          .prepare(
+            `INSERT OR IGNORE INTO watchlists
+               (id, name, prompt, filters_json, active, message_template, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            item.id,
+            item.name,
+            item.prompt,
+            JSON.stringify(item.filters ?? {}),
+            item.active !== false ? 1 : 0,
+            item.messageTemplate ?? null,
+            now,
+            now,
+          );
       }
-
-      const placeholders = items.map(() => "?").join(", ");
-      this.db
-        .prepare(
-          `UPDATE watchlists SET active = 0, updated_at = ?
-           WHERE id NOT IN (${placeholders})`,
-        )
-        .run(now, ...items.map((item) => item.id));
     });
 
-    sync(watchlists);
+    seed(watchlists);
     return this.list();
   }
 }
@@ -265,6 +307,43 @@ export class ProcessingRepository {
       aiDecision: JSON.parse(row.ai_decision_json),
       createdAt: row.created_at,
     }));
+  }
+
+  getStats(): {
+    totalProcessed: number;
+    totalMatches: number;
+    processedLastHour: number;
+    matchesLastHour: number;
+  } {
+    const oneHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+
+    const totalProcessed = (
+      this.db.prepare("SELECT COUNT(*) as n FROM processed_events").get() as {
+        n: number;
+      }
+    ).n;
+
+    const totalMatches = (
+      this.db.prepare("SELECT COUNT(*) as n FROM insights").get() as {
+        n: number;
+      }
+    ).n;
+
+    const processedLastHour = (
+      this.db
+        .prepare(
+          "SELECT COUNT(*) as n FROM processed_events WHERE created_at >= ?",
+        )
+        .get(oneHourAgo) as { n: number }
+    ).n;
+
+    const matchesLastHour = (
+      this.db
+        .prepare("SELECT COUNT(*) as n FROM insights WHERE created_at >= ?")
+        .get(oneHourAgo) as { n: number }
+    ).n;
+
+    return { totalProcessed, totalMatches, processedLastHour, matchesLastHour };
   }
 
   queryInsightsByText(input: {

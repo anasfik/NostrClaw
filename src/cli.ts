@@ -8,7 +8,7 @@ import { hideBin } from "yargs/helpers";
 
 const API_HOST = process.env.API_HOST || "http://localhost:8080";
 const LOG_FILE_PATH = process.env.LOG_FILE_PATH || "./log.txt";
-const DB_PATH = process.env.DB_PATH || "./nostr-claw.sqlite";
+const DB_PATH = process.env.DB_PATH || "./nostr-mind.sqlite";
 
 async function fetchApi(endpoint: string, options?: RequestInit) {
   const url = `${API_HOST}${endpoint}`;

@@ -27,7 +27,7 @@ export class NostrWsRelayConnector implements RelayConnector {
 
   start(filters: RelayFilter[]): void {
     this.filters = filters.length ? filters : [{ kinds: [1] }];
-    this.subscriptionId = `nostr-claw-${crypto.randomUUID()}`;
+    this.subscriptionId = `nostrmind-${crypto.randomUUID()}`;
     this.stopped = false;
 
     this.logger?.info(
